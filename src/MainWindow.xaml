@@ -5,27 +5,30 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:FastDownloader"
         mc:Ignorable="d"
-        Title="FastDownloader" Height="450" Width="800">
-    <Grid Margin="10">
+        Title="FastDownloader" Height="354" Width="575">
+    <Grid Margin="10,10,10,-6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" >
-            <Button Content="Test Combine" Click="TestCombine_Click" Width="150" Height="40"/>
-            <Button Content="Start Download" Click="StartDownload_Click" Width="150" Height="40"/>
+            <Button Height="45" Width="22" Content="Start Download" Click="StartDownload_Click"/>
+
         </StackPanel>
 
         <DataGrid Grid.Row="1"
                   x:Name="FilesGrid"
                   AutoGenerateColumns="False"
-                  ItemsSource="{Binding Files}"
-                  IsReadOnly="True">
+                  ItemsSource="{Binding FilesToDownload}"
+                  IsReadOnly="True" Margin="0,83,0,10">
             <DataGrid.Columns>
+                <DataGridTextColumn Header="Segment #" Binding="{Binding FileName}" Width="*" />
                 <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="200"/>
-                <DataGridTemplateColumn Header="Progress" Width="200">
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="*"/>
+                <DataGridTextColumn Header="Remaining" Binding="{Binding Remaining}" Width="*"/>
+                <DataGridTemplateColumn Header="Progress" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ProgressBar Minimum="0"
@@ -35,9 +38,21 @@
                          Margin="2"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
+
                 </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="*"/>
 
             </DataGrid.Columns>
         </DataGrid>
+        <Button x:Name="btnCancel" Content="Cancel" HorizontalAlignment="Left" Margin="462,35,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.Row="1"/>
+        <Button x:Name="btnPause" Content="Pause" HorizontalAlignment="Left" Margin="355,35,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.Row="1"/>
+        <Button x:Name="btnDetails" Content="Show Details" HorizontalAlignment="Left" Margin="39,101,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.RowSpan="2"/>
+        <ProgressBar HorizontalAlignment="Left" Height="20" Margin="39,5,0,0" VerticalAlignment="Top" Width="503" Grid.Row="1"/>
+        <Label x:Name="labelDownloaded" Content="Downloaded" HorizontalAlignment="Left" Margin="39,10,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10"/>
+        <Label x:Name="labelTransferRate" Content="Transfer Rate" HorizontalAlignment="Left" Margin="39,30,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10"/>
+        <Label x:Name="labelTimeLeft" Content="Time Left" HorizontalAlignment="Left" Margin="39,50,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" RenderTransformOrigin="0.488,1.202"/>
+        <Label x:Name="labelTransferRate_Data" Content="1.344 MB/sec" HorizontalAlignment="Left" Margin="110,30,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" FontWeight="Bold" HorizontalContentAlignment="Right"/>
+        <Label x:Name="labelDownloaded_Data" Content="21 / 40  files" HorizontalAlignment="Left" Margin="110,10,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" FontWeight="Bold" HorizontalContentAlignment="Right"/>
+        <Label x:Name="labelTimeLeft_Data" Content="3 minutes 29 seconds" HorizontalAlignment="Left" Margin="110,50,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" RenderTransformOrigin="0.488,1.202" FontWeight="Bold" HorizontalContentAlignment="Right"/>
     </Grid>
 </Window>
