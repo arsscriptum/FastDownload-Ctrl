@@ -46,7 +46,7 @@ namespace FastDownloader
             try
             {
                 List<FileDownloadItem> url_list = LoadUrls();
-       
+                MessageBox.Show($"url_list.Count:\n{url_list.Count()}");
                 foreach (var f in url_list)
                 {
                     FilesToDownload.Add(f);
@@ -54,7 +54,7 @@ namespace FastDownloader
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to InitializeDataUrls: {ex.Message}");
+                MessageBox.Show($"Failed to load JSON file: {ex.Message}");
             }
         }
         public List<FileDownloadItem> LoadUrls()
@@ -92,10 +92,12 @@ namespace FastDownloader
 
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(downloadPath)!);
 
-
+#if NETNEW
+            using var httpStream = await response.Content.ReadAsStreamAsync(ct);
+#else
             using var httpStream = await response.Content.ReadAsStreamAsync();
 
-
+#endif 
             using var fileStream = new FileStream(downloadPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
             var buffer = new byte[81920];
@@ -104,11 +106,18 @@ namespace FastDownloader
 
 
 
+#if NETNEW
+            int httpStreamRead = await httpStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
+            while (httpStreamRead > 0)
+            {
+                httpStreamRead = await httpStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
+
+#else
             int httpStreamRead = await httpStream.ReadAsync(buffer, 0, buffer.Length, ct);
             while (httpStreamRead > 0)
             {
                 httpStreamRead = await httpStream.ReadAsync(buffer, 0, buffer.Length, ct);
-
+#endif 
 
                 fileStream.Write(buffer, 0, httpStreamRead);
                 totalRead += httpStreamRead;
@@ -133,7 +142,99 @@ namespace FastDownloader
         }
 
      
+#if SEQUENTIAL_FOREACH
+        public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, string rootDirectory, CancellationToken ct = default)
+        {
+            var fileInfoList = new List<FileInfo>();
 
+            foreach (var file in fileList)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+
+                // Find matching FileDownloadItem
+                var matchingItem = Files.FirstOrDefault(f => f.FileName == fileName);
+
+                // Define how to update the status safely on the UI thread
+                Action<string> updateStatus = (status) =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (matchingItem != null)
+                        {
+                            matchingItem.Status = status;
+                        }
+                    });
+                };
+                Action<int> reportProgress = (percent) =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (matchingItem != null)
+                        {
+                            matchingItem.Progress = percent;
+                        }
+                    });
+                };
+
+                var fileInfo = await DownloadFile(file, rootDirectory, ct, updateStatus, reportProgress);
+                fileInfoList.Add(fileInfo);
+            }
+
+            return fileInfoList;
+        }
+#endif
+
+#if PARALLEL_FOREACH_ASYNC
+        public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, string rootDirectory, CancellationToken ct = default)
+        {
+            var fileInfoBag = new ConcurrentBag<FileInfo>();
+
+            var parallelOptions = new ParallelOptions
+            {
+                CancellationToken = ct,
+                MaxDegreeOfParallelism = Config.MaxDegreeOfParallelism
+            };
+
+            await Parallel.ForEachAsync(fileList, parallelOptions, async (file, ctx) =>
+            {
+                var fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+
+                // Find matching FileDownloadItem
+                var matchingItem = Files.FirstOrDefault(f => f.FileName == fileName);
+
+                // Define how to update the status safely on the UI thread
+                Action<string> updateStatus = (status) =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (matchingItem != null)
+                        {
+                            matchingItem.Status = status;
+                        }
+                    });
+                };
+                Action<int> reportProgress = (percent) =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (matchingItem != null)
+                        {
+                            matchingItem.Progress = percent;
+                        }
+                    });
+                };
+                var fileInfo = await DownloadFile(file, rootDirectory, ctx, updateStatus, reportProgress);
+                fileInfoBag.Add(fileInfo);
+            });
+
+
+            return fileInfoBag.ToList();
+        }
+#endif
+
+//#if THROTTLED_ASYNC_NET472
        
         public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, string rootDirectory, CancellationToken ct = default)
         {
@@ -183,6 +284,8 @@ namespace FastDownloader
 
             return fileInfoBag.ToList();
         }
+        
+//#endif
 
         private async void StartDownload_Click(object sender, RoutedEventArgs e)
         {
