@@ -15,10 +15,7 @@ param(
     [switch]$Release,
     [Parameter(Mandatory = $false)]
     [Alias("c")]
-    [switch]$Clean,
-    [Parameter(Mandatory = $false)]
-    [Alias("gifs")]
-    [switch]$AnimatedGifs
+    [switch]$Clean
 )
 if (($Debug) -and ($Release)) {
     Write-Host "[ERROR] " -n -f DarkRed
@@ -76,20 +73,15 @@ Write-Host " Dependencies...`n" -f DarkGray
 Write-Host "  ✔️  Including Script $RegisterDepScript" -f Magenta
 . "$RegisterDepScript"
 
-[string]$tmp = if ($AnimatedGifs) { "Using AnimatedGifs" } else { "Simple Control" }
+
 [string]$BuildInfo = "Target {0}, {1}" -f $Target, $tmp
 
 Write-Host "=========================================================" -f DarkGray
 Write-Host " Initialization Completed!...`n" -f Blue
 Write-Host "  ✔️  Creating a NEW BUILD REQUEST $BuildInfo" -f Blue
 
-$request2 = New-BuildRequest -WorkingDirectory "$BuildPath" -ProjectFilePath "WebExtensionPack.Controls.csproj" -Architecture "win-x64" -OutputPath "bin" -DeployPath "$libsPath" -ArtifactsPath "artifacts" -Configuration "$Target" -Framework "net472" -Version "1.0.1" -LogLevel Normal -Owner "gp"
+$request2 = New-BuildRequest -WorkingDirectory "$BuildPath" -ProjectFilePath "FastDownloader.csproj" -Architecture "win-x64" -OutputPath "bin" -DeployPath "$libsPath" -ArtifactsPath "artifacts" -Configuration "$Target" -Framework "net472" -Version "1.0.1" -LogLevel Normal -Owner "gp"
 
-if ($AnimatedGifs) {
-    $request2.AddProperty("USE_ANIMATED_GIFS", "true")
-} else {
-    $request2.AddProperty("USE_ANIMATED_GIFS", "false")
-}
 $request2.AddProperty("LOGGING_ENABLED", "true")
 
 
@@ -99,7 +91,7 @@ while (BuildsRemaining) {
     StartBuild $BuildRequest
 }
 
-[System.Management.Automation.PathInfo]$pi = Resolve-Path -Path "libs\WebExtensionPack" -RelativeBasePath "..\.." -ErrorAction Ignore
+[System.Management.Automation.PathInfo]$pi = Resolve-Path -Path "libs\FastDownloader" -RelativeBasePath "..\.." -ErrorAction Ignore
 if (($pi) -and ($pi.Path)) {
     $DestinationDeployPath = $pi.Path
 

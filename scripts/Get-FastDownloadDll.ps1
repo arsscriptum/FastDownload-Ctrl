@@ -1,6 +1,6 @@
 ﻿#╔════════════════════════════════════════════════════════════════════════════════╗
 #║                                                                                ║
-#║   Get-WpfExtensionCtrl.ps1                                                     ║
+#║   Get-FastDownloadDll.ps1                                                     ║
 #║   Test functions for my WPF control                                            ║
 #║                                                                                ║
 #╟────────────────────────────────────────────────────────────────────────────────╢
@@ -10,7 +10,7 @@
 
 
 
-function Get-ExtensionControlDllPath {
+function Get-FastDownloadDllPath {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Position = 0, Mandatory = $false, HelpMessage = "targets")]
@@ -20,14 +20,14 @@ function Get-ExtensionControlDllPath {
     )
 
     try {
-        Write-Verbose "[Get-ExtensionControlDllPath] $ENV:Target"
+        Write-Verbose "[Get-FastDownloadDllPath] $ENV:Target"
         $LibBasename = "WebExtensionPack.Controls"
         $LibName = "{0}.dll" -f $LibBasename
 
 
         $SearchPath = if($Configuration -eq "Release"){"ql"}else{"$Global:BinariesDebugPath"}
 
-        Write-Host "[Get-ExtensionControlDllPath] Target $Target - Search Path $SearchPath"
+        Write-Host "[Get-FastDownloadDllPath] Target $Target - Search Path $SearchPath"
        [string[]]$AllDlls = Get-ChildItem -Path "$SearchPath" -Filter "*.dll" -File -Recurse | Select -ExpandProperty Fullname | sort
         $DllFound = $AllDlls.Where({ $_.EndsWith("$LibName") }) | Select -First 1
         if ($DllFound) {

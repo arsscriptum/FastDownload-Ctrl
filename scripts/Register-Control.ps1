@@ -10,7 +10,7 @@
 
 
 
-function Register-ExtensionControlDll {
+function Register-FastDownloadDll {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Position = 0, Mandatory = $false, HelpMessage = "targets")]
@@ -28,14 +28,14 @@ function Register-ExtensionControlDll {
 
     if ($DoCheck) {
         if (Test-ExtensionControlLoaded) {
-            Write-Verbose "[Register-ExtensionControlDll] already loaded"
+            Write-Verbose "[Register-FastDownloadDll] already loaded"
             return;
         }
     }
 
-    $DllPath = Get-ExtensionControlDllPath $Target
+    $DllPath = Get-FastDownloadDllPath $Target
     if (($DllPath) -and (Test-Path $DllPath)) {
-        Write-Verbose "[Register-ExtensionControlDll] Add-Type -Path `"$DllPath`""
+        Write-Verbose "[Register-FastDownloadDll] Add-Type -Path `"$DllPath`""
         $moduleType = Add-Type -Path "$DllPath" -Passthru
         $DllItem = Get-Item -Path "$DllPath"
         $DllBaseName = $DllItem.BaseName
@@ -62,7 +62,7 @@ function Register-ExtensionControlDll {
 }
 
 
-function Unregister-ExtensionControlDll {
+function Unregister-FastDownloadDll {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $false, HelpMessage = "targets")]
@@ -96,7 +96,7 @@ function Unregister-ExtensionControlDll {
                 if ($ProcessPtr) {
                     $Status = if ($Process.Responding) { "active and responding" } else { "process crashed, hanged" }
                     $pname = "Process Id {0} [{1}.exe]" -f $Id, $Process.Name
-                    $StrLog = "ExtensionControlDll {0} ({1})" -f $pname, $Status
+                    $StrLog = "FastDownloadDll {0} ({1})" -f $pname, $Status
                     Write-Verbose "$StrLog"
                     try {
                         $PtrId = $ProcessPtr.Id

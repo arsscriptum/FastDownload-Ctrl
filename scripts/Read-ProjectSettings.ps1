@@ -147,7 +147,7 @@ function Read-DevProjectSettings {
 }
 
 
-function Add-WpfCtrlProcessId {
+function Add-FastDownload-CtrlProcessId {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, position = 0, HelpMessage = "Name of the scheduled task")]
@@ -155,7 +155,7 @@ function Add-WpfCtrlProcessId {
     )
 
     process {
-        [string]$ProjectKey = 'HKCU:\SOFTWARE\arsscriptum\development\projects\WpfCtrl\processes'
+        [string]$ProjectKey = 'HKCU:\SOFTWARE\arsscriptum\development\projects\FastDownload-Ctrl\processes'
 
         # Ensure parent key exists
         if (-not (Test-Path $ProjectKey)) {
@@ -189,12 +189,12 @@ function Add-WpfCtrlProcessId {
 
 
 
-function Remove-WpfCtrlProcessId {
+function Remove-FastDownload-CtrlProcessId {
     [CmdletBinding(SupportsShouldProcess)]
     param()
 
     process {
-        [string]$ProjectKey = 'HKCU:\SOFTWARE\arsscriptum\development\projects\WpfCtrl\processes'
+        [string]$ProjectKey = 'HKCU:\SOFTWARE\arsscriptum\development\projects\FastDownload-Ctrl\processes'
 
         # Ensure parent key exists
         if (-not (Test-Path $ProjectKey)) {
@@ -207,20 +207,20 @@ function Remove-WpfCtrlProcessId {
 }
 
 
-function Write-WpfCtrlSettings {
+function Write-FastDownload-CtrlSettings {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, position = 0, HelpMessage = "Name of the scheduled task")]
         [pscustomobject]$ProjectSettings
     )
     process {
-        [string]$Project = 'WpfCtrl'
+        [string]$Project = 'FastDownload-Ctrl'
         Write-DevProjectSettings $Project $ProjectSettings
     }
 }
 
 
-function Reset-WpfCtrlSettings {
+function Reset-FastDownload-CtrlSettings {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $false)]
@@ -229,36 +229,36 @@ function Reset-WpfCtrlSettings {
 
     $BasePath = ""
     if ([string]::IsNullOrEmpty($Path)) {
-        $BasePath = "C:\Dev\WpfCtrl-ExtensionItem"
+        $BasePath = "C:\Dev\FastDownload-Ctrl"
     } else {
         $BasePath = (Resolve-Path -Path "$Path").Path
     }
 
 
     [pscustomobject]$ProjectSettings = [pscustomobject]@{
-        'register_assemblies' = "register-ExtensionControlDll"
-        'unregister_assemblies' = "Unregister-ExtensionControlDll"
+        'register_assemblies' = "register-FastDownloadDll"
+        'unregister_assemblies' = "Unregister-FastDownloadDll"
         'project_root' = "$BasePath"
         'deployed_root_path' = "$BasePath\libs"
         'deploy_assemblies_path' = "$BasePath\libs\%Target%"
         'register_assemblies_after_build' = 0
-        'scripts' = @("$BasePath\scripts\Get-WpfExtensionCtrl.ps1",
+        'scripts' = @("$BasePath\scripts\Get-FastDownloadDll.ps1",
             "$BasePath\scripts\Register-Control.ps1",
             "$BasePath\scripts\Register-Dependencies.ps1",
             "$BasePath\scripts\Show-TestDialog.ps1")
     }
-    $ProjectSettings | Write-WpfCtrlSettings
-    Add-WpfCtrlProcessId $pid
+    $ProjectSettings | Write-FastDownload-CtrlSettings
+    Add-FastDownload-CtrlProcessId $pid
 
 }
 
 
 
 
-function Read-WpfCtrlSettings {
+function Read-FastDownload-CtrlSettings {
     [CmdletBinding(SupportsShouldProcess)]
     param()
 
-    [string]$Project = 'WpfCtrl'
+    [string]$Project = 'FastDownload-Ctrl'
     return (Read-DevProjectSettings $Project)
 }

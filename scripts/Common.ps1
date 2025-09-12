@@ -1,5 +1,19 @@
 ﻿
+#╔════════════════════════════════════════════════════════════════════════════════╗
+#║                                                                                ║
+#║   Common.ps1                                                                   ║
+#║   Test functions for my WPF control                                            ║
+#║                                                                                ║
+#╟────────────────────────────────────────────────────────────────────────────────╢
+#║   Guillaume Plante <codegp@icloud.com>                                         ║
+#║   Code licensed under the GNU GPL v3.0. See the LICENSE file for details.      ║
+#╚════════════════════════════════════════════════════════════════════════════════╝
 
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [Parameter(Mandatory = $false)]
+    [switch]$Reset
+)
 
 try {
     function Get-ProjectRootPath {
@@ -212,34 +226,29 @@ function Read-ProjectPathProperties {
 }
 
 
-
-
-function Reset-RegistryProjectPathProperties {
+function Reset-ProjectRegistrySettings {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $false, Position = 0)]
-        [string]$ProjectName = "ExtensionItemCtrl"
+        [string]$ProjectName = "FastDownload-Ctrl"
     )
     try {
-
         Write-ProjectPathProperties -ProjectName "$ProjectName" $Script:ProjectSettingsToSave
     } catch {
         Write-Error "$_"
     }
-
-
 }
 
-
-
-function Initialize-RegistryProjectPathProperties {
+function Initialize-ProjectRegistrySettings {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $false, Position = 0)]
-        [string]$ProjectName = "ExtensionItemCtrl"
+        [string]$ProjectName = "FastDownload-Ctrl"
     )
-
-
     Read-ProjectPathProperties -ProjectName "$ProjectName"
+}
 
+if($Reset){
+    Reset-ProjectRegistrySettings "FastDownload-Ctrl"
+    Initialize-ProjectRegistrySettings "FastDownload-Ctrl"
 }
