@@ -1,0 +1,365 @@
+﻿using FastDownloader;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using static System.Net.WebRequestMethods;
+
+#define USE_TEST_RESOURCES
+
+namespace FastDownloader
+{
+    public static class Config
+    {
+        public static int MaxDegreeOfParallelism { get; set; } = 30;
+
+        public static HttpClient HttpClient { get; } = new HttpClient();
+    }
+   
+    public class File
+    {
+        public string DownloadUrl { get; set; } = "";
+        public string ParentFolder { get; set; } = "";
+    }
+    public class SegmentInfo
+    {
+        public string PackageId { get; set; } = "";
+        public string PartId { get; set; } = "";
+        public int Index { get; set; }
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public string Url { get; set; } = "";
+        public string Hash { get; set; } = "";
+        public string HashAlgorithm { get; set; } = "";
+        public bool Encrypted { get; set; }
+        public string Version { get; set; } = "";
+    }
+    public class PackageInfo
+    {
+        public string PackageId { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public string IndexUrl { get; set; } = "";
+        public string Hash { get; set; } = "";
+        public string HashAlgorithm { get; set; } = "";
+        public bool Encrypted { get; set; }
+        public string Version { get; set; } = "";
+        public int NumParts { get; set; }
+        public List<SegmentInfo> Parts { get; set; } = new();
+    }
+
+    public partial class MainWindow : Window, INotifyPropertyChanged
+    {
+        public ObservableCollection<FileDownloadItem> Segments { get; set; } = new();
+        public string DownloadPath { get; set; } = "C:\\tmp";
+        public string PackagePath { get; set; } = "C:\\tmp\\bmw_installer_package.rar.aes";
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // Change your property implementations to notify:
+        private int _downloadedSegments = 0;
+        public int DownloadedSegments
+        {
+            get => _downloadedSegments;
+            set { _downloadedSegments = value; OnPropertyChanged(nameof(DownloadedSegments)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(OverallProgress)); }
+        }
+
+        private int _totalSegments = 0;
+        public int TotalSegments
+        {
+            get => _totalSegments;
+            set { _totalSegments = value; OnPropertyChanged(nameof(TotalSegments)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(OverallProgress)); }
+        }
+
+        public string SummaryDownloaded => $"{DownloadedSegments} / {TotalSegments} segments";
+
+        // Add this:
+        public double OverallProgress => TotalSegments == 0 ? 0 : (double)DownloadedSegments / TotalSegments * 100;
+
+        public MainWindow()
+        {
+             
+            //InitializeComponent();
+            DataContext = this;
+#if USE_TEST_RESOURCES
+            LoadPackageInfoFromResource();
+#endif
+        }
+
+#if USE_TEST_RESOURCES
+        private async void LoadPackageInfoFromResource()
+        {
+            try
+            {
+                string jsonUrl = "FastDownloader.res.bmw-advanced-tools.json";
+                var jsonString = "";
+                var files = await LoadJsonPackageInfo(jsonString);
+                foreach (var f in files)
+                {
+                    Segments.Add(f);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to load JSON file: {ex.Message}");
+            }
+        }
+#endif
+
+        public async Task<List<FileDownloadItem>> LoadJsonPackageInfo(string jsonString)
+        {
+            
+            var model = JsonSerializer.Deserialize<PackageInfo>(jsonString);
+
+            if (model == null || model.Parts == null)
+                throw new Exception("JSON is invalid or missing listparts.");
+
+            // Convert JSON URLs into FileDownloadItem objects
+            var files = model.Parts.Select(p => new FileDownloadItem
+            {
+                Url = p.Url,
+                FileName = Path.GetFileName(p.Url),
+                Status = "Pending",
+                Size = p.Size,
+                Remaining = p.Size,
+                Progress = 0
+            }).ToList();
+
+            return files;
+        }
+
+#if USE_TEST_DATA_01
+        private void InitializeDataUrls()
+        {
+            try
+            {
+                List<FileDownloadItem> url_list = LoadUrls();
+       
+                foreach (var f in url_list)
+                {
+                    Segments.Add(f);
+                }
+
+                TotalSegments = Segments.Count();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to InitializeDataUrls: {ex.Message}");
+            }
+        }
+        public List<FileDownloadItem> LoadUrls()
+        {
+            string[] urls = Enumerable.Range(1, 40).Select(i => $"http://arsscriptum.github.io/bmw-advanced-tools/data/project_source{i:D4}.cpp").ToArray();
+            int segmentId = 1;
+            var files = urls.Select(url => new FileDownloadItem
+            {
+                Url = url,
+                FileName = Path.GetFileName(url),
+                Status = "Pending",
+                Progress = 0,
+                Size = 10485760,
+                Remaining = 10485760,
+                SegmentNumber = segmentId++
+            }).ToList();
+
+            return files;
+      
+        }
+#endif
+        public async Task<FileInfo> DownloadFile(
+    File file,
+    string rootDirectory,
+    CancellationToken ct = default,
+    Action<string>? updateStatus = null,
+    Action<int>? reportProgress = null)
+        {
+            var sw = Stopwatch.StartNew();
+
+            updateStatus?.Invoke("Downloading");
+
+            string fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+            string downloadPath = System.IO.Path.Combine(rootDirectory, fileName);
+
+            using var response = await Config.HttpClient.GetAsync(file.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            response.EnsureSuccessStatusCode();
+
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(downloadPath)!);
+
+
+            using var httpStream = await response.Content.ReadAsStreamAsync();
+
+
+            using var fileStream = new FileStream(downloadPath, FileMode.Create, FileAccess.Write, FileShare.None);
+
+            var buffer = new byte[81920];
+            long totalRead = 0;
+            var totalBytes = response.Content.Headers.ContentLength ?? -1;
+
+
+
+            int httpStreamRead = await httpStream.ReadAsync(buffer, 0, buffer.Length, ct);
+            while (httpStreamRead > 0)
+            {
+                httpStreamRead = await httpStream.ReadAsync(buffer, 0, buffer.Length, ct);
+
+
+                fileStream.Write(buffer, 0, httpStreamRead);
+                totalRead += httpStreamRead;
+
+                if (totalBytes > 0)
+                {
+                    int percent = (int)(totalRead * 100 / totalBytes);
+                    reportProgress?.Invoke(percent);
+                }
+            }
+
+            sw.Stop();
+
+            // Format download time
+            var duration = sw.Elapsed;
+            string durationStr = $"{duration.TotalSeconds:F2}s";
+            DownloadedSegments = DownloadedSegments + 1;
+   
+            string SummaryDownloaded = $"{DownloadedSegments} / {TotalSegments} segments";
+
+            // Update status to show transfer time
+            updateStatus?.Invoke($"Completed in {durationStr}");
+
+            return new FileInfo(downloadPath);
+        }
+
+     
+
+       
+        public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, string rootDirectory, CancellationToken ct = default)
+        {
+            var fileInfoBag = new ConcurrentBag<FileInfo>();
+            var semaphore = new SemaphoreSlim(Config.MaxDegreeOfParallelism);
+
+            var tasks = fileList.Select(async file =>
+            {
+                await semaphore.WaitAsync(ct);
+                try
+                {
+                    var fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+
+                    var matchingItem = Segments.FirstOrDefault(f => f.FileName == fileName);
+
+                    Action<string> updateStatus = (status) =>
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            if (matchingItem != null)
+                            {
+                                matchingItem.Status = status;
+                            }
+                        });
+                    };
+                    Action<int> reportProgress = (percent) =>
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            if (matchingItem != null)
+                            {
+                                matchingItem.Progress = percent;
+                            }
+                        });
+                    };
+
+                    var fileInfo = await DownloadFile(file, rootDirectory, ct, updateStatus, reportProgress);
+                    fileInfoBag.Add(fileInfo);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            return fileInfoBag.ToList();
+        }
+
+        private async void StartDownload_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var swGlobal = Stopwatch.StartNew();
+
+                string downloadRoot = this.DownloadPath;
+                Directory.CreateDirectory(downloadRoot);
+
+                var segs = Segments.Select(f => new File
+                {
+                    DownloadUrl = f.Url,
+                    ParentFolder = ""
+                }).ToList();
+
+                var downloadedFiles = await DownloadFiles(segs, downloadRoot);
+
+                foreach (var fileInfo in downloadedFiles)
+                {
+                    var matchingFile = Segments.FirstOrDefault(f => f.FileName == fileInfo.Name);
+                    if (matchingFile != null)
+                    {
+                        matchingFile.Progress = 100;
+                        // Status already updated in DownloadFile
+                    }
+                }
+
+                swGlobal.Stop();
+                string globalDuration = $"{swGlobal.Elapsed.TotalSeconds:F2}s";
+
+                MessageBox.Show($"All downloads completed in {globalDuration}.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error downloading files: {ex.Message}");
+            }
+        }
+
+
+    }
+
+
+    public class FileDownloadItem : DependencyObject
+    {
+        public int SegmentNumber { get; set; } = 0;
+        public long Size { get; set; } = 0;
+        public long Remaining { get; set; } = 0;
+        public string Speed { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string FileName { get; set; } = "";
+        public string Status
+        {
+            get => (string)GetValue(StatusProperty);
+            set => SetValue(StatusProperty, value);
+        }
+
+
+        public static readonly DependencyProperty StatusProperty =
+            DependencyProperty.Register("Status", typeof(string), typeof(FileDownloadItem), new PropertyMetadata(""));
+
+        public int Progress
+        {
+            get => (int)GetValue(ProgressProperty);
+            set => SetValue(ProgressProperty, value);
+        }
+
+        public static readonly DependencyProperty ProgressProperty =
+            DependencyProperty.Register("Progress", typeof(int), typeof(FileDownloadItem), new PropertyMetadata(0));
+    }
+
+}

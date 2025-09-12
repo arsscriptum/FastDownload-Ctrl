@@ -1,33 +1,95 @@
 ﻿<Window x:Class="FastDownloader.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:FastDownloader"
-        mc:Ignorable="d"
-        Title="FastDownloader" Height="354" Width="575">
-    <Grid Margin="10,10,10,-6">
+        Title="Download Files" Height="570" Width="950"
+        WindowStartupLocation="CenterScreen"
+        Background="#FAFAFA">
+
+    <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <!-- Summary Info -->
             <RowDefinition Height="Auto"/>
+            <!-- Progress Bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Buttons -->
+            <RowDefinition Height="*"/>
+            <!-- Segment Details -->
         </Grid.RowDefinitions>
-        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" >
-            <Button Height="45" Width="22" Content="Start Download" Click="StartDownload_Click"/>
 
-        </StackPanel>
+        <!-- Summary Row -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <DataGrid Grid.Row="1"
-                  x:Name="FilesGrid"
-                  AutoGenerateColumns="False"
-                  ItemsSource="{Binding FilesToDownload}"
-                  IsReadOnly="True" Margin="0,83,0,10">
+            <StackPanel Orientation="Vertical" Grid.Column="1">
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Downloaded" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding SummaryDownloaded, Mode=OneWay}" FontWeight="Bold" FontSize="15"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Transfer Rate" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding TransferRate, Mode=OneWay}" FontWeight="Bold"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Time Left" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding TimeLeft, Mode=OneWay}" FontWeight="Bold"/>
+                </Grid>
+            </StackPanel>
+        </Grid>
+
+        <!-- Progress Bar -->
+        <ProgressBar Grid.Row="1" Height="24" Minimum="0" Maximum="100" 
+                     Value="{Binding OverallProgress, Mode=OneWay}" 
+                     Margin="0,0,0,8"/>
+
+        <!-- Buttons Row -->
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Content="Show Details" Width="120" Height="32" Margin="0,0,8,0"/>
+            <Button Grid.Column="1" Content="Pause" Width="90" Height="32" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Content="Cancel" Width="90" Height="32" Click="StartDownload_Click"/>
+        </Grid>
+
+        <!-- Segment Details DataGrid -->
+        <DataGrid Grid.Row="3" 
+                  ItemsSource="{Binding Segments, Mode=OneWay}" 
+                  AutoGenerateColumns="False" 
+                  HeadersVisibility="Column"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserResizeRows="False"
+                  IsReadOnly="True"
+                  RowHeaderWidth="0"
+                  Margin="0"
+                  FontSize="15"
+                  >
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Segment #" Binding="{Binding FileName}" Width="*" />
+                <DataGridTextColumn Header="Segment #" Binding="{Binding SegmentNumber}" Width="*"/>
                 <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*"/>
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
-                <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="*"/>
-                <DataGridTextColumn Header="Remaining" Binding="{Binding Remaining}" Width="*"/>
+                <DataGridTextColumn Header="Size" Binding="{Binding SizeString}" Width="*"/>
+                <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingString}" Width="*"/>
                 <DataGridTemplateColumn Header="Progress" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -41,18 +103,7 @@
 
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Speed" Binding="{Binding Speed}" Width="*"/>
-
             </DataGrid.Columns>
         </DataGrid>
-        <Button x:Name="btnCancel" Content="Cancel" HorizontalAlignment="Left" Margin="462,35,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.Row="1"/>
-        <Button x:Name="btnPause" Content="Pause" HorizontalAlignment="Left" Margin="355,35,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.Row="1"/>
-        <Button x:Name="btnDetails" Content="Show Details" HorizontalAlignment="Left" Margin="39,101,0,0" VerticalAlignment="Top" Height="25" Width="80" Grid.RowSpan="2"/>
-        <ProgressBar HorizontalAlignment="Left" Height="20" Margin="39,5,0,0" VerticalAlignment="Top" Width="503" Grid.Row="1"/>
-        <Label x:Name="labelDownloaded" Content="Downloaded" HorizontalAlignment="Left" Margin="39,10,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10"/>
-        <Label x:Name="labelTransferRate" Content="Transfer Rate" HorizontalAlignment="Left" Margin="39,30,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10"/>
-        <Label x:Name="labelTimeLeft" Content="Time Left" HorizontalAlignment="Left" Margin="39,50,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" RenderTransformOrigin="0.488,1.202"/>
-        <Label x:Name="labelTransferRate_Data" Content="1.344 MB/sec" HorizontalAlignment="Left" Margin="110,30,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" FontWeight="Bold" HorizontalContentAlignment="Right"/>
-        <Label x:Name="labelDownloaded_Data" Content="21 / 40  files" HorizontalAlignment="Left" Margin="110,10,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" FontWeight="Bold" HorizontalContentAlignment="Right"/>
-        <Label x:Name="labelTimeLeft_Data" Content="3 minutes 29 seconds" HorizontalAlignment="Left" Margin="110,50,0,0" VerticalAlignment="Top" Height="20" Width="100" FontFamily="Microsoft Sans Serif" FontSize="10" RenderTransformOrigin="0.488,1.202" FontWeight="Bold" HorizontalContentAlignment="Right"/>
     </Grid>
 </Window>

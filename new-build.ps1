@@ -116,3 +116,14 @@ if (($pi) -and ($pi.Path)) {
     }
 
 }
+
+
+
+Write-Host "=========================================================" -f DarkGray
+Write-Host "  CLEANING UP BUILD FILES ...`n" -f White
+Write-Host "  ✔️ $BinPath " -f DarkCyan
+Write-Host "  ✔️ $ObjPath " -f DarkCyan
+Write-Host "  ✔️ $ArtifactsPath " -f DarkCyan
+Remove-Item -Path "$BinPath" -Recurse -Force -ErrorAction Ignore | Out-Null
+Remove-Item -Path "$ObjPath" -Recurse -Force -ErrorAction Ignore | Out-Null
+Remove-Item -Path "$ArtifactsPath" -Recurse -Force -ErrorAction Ignore | Out-Null

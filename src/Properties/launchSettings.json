@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "FastDownloader": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Dev\\FastDownload-Ctrl\\libs\\Debug"
+    },
+    "BUILT": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Dev\\FastDownload-Ctrl\\libs\\Debug\\FastDownloader.exe",
+      "workingDirectory": "C:\\Dev\\FastDownload-Ctrl\\libs\\Debug"
+    }
+  }
+}
