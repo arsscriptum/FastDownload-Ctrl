@@ -16,6 +16,7 @@ using System.Windows;
 using System.Windows.Controls;
 using static System.Net.WebRequestMethods;
 using static System.Windows.Forms.AxHost;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.Header;
 
 
 namespace FastDownloader
@@ -81,6 +82,9 @@ namespace FastDownloader
         public Stopwatch EtaTimer { get; set; } = new Stopwatch();
         public NetworkStatsHelper NetworkStatisticsHelper = new NetworkStatsHelper();
         public event PropertyChangedEventHandler PropertyChanged;
+        private bool _detailsShown = true;
+        private double _collapsedHeight = 240; // Set this to your "collapsed" height
+        private double _expandedHeight = 560;  // Set this to your "expanded" height
         protected void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
@@ -120,6 +124,19 @@ namespace FastDownloader
         }
         private readonly System.Windows.Threading.DispatcherTimer _uiTimer = new System.Windows.Threading.DispatcherTimer();
 
+        private string _packageSize;
+        public string PackageSize
+        {
+            get => _packageSize;
+            set { _packageSize = value; OnPropertyChanged(nameof(PackageSize)); }
+        }
+
+        private string _packageRemaining;
+        public string PackageRemaining
+        {
+            get => _packageRemaining;
+            set { _packageRemaining = value; OnPropertyChanged(nameof(PackageRemaining)); }
+        }
 
         public string SummaryDownloaded => $"{DownloadedSegments} / {TotalSegments} segments";
 
@@ -141,7 +158,7 @@ namespace FastDownloader
              
             //InitializeComponent();
             DataContext = this; 
-            _uiTimer.Interval = TimeSpan.FromMilliseconds(2500);
+            _uiTimer.Interval = TimeSpan.FromMilliseconds(500);
             _uiTimer.Tick += (s, e) => UpdateStats();
             _uiTimer.Start();
 
@@ -179,20 +196,12 @@ namespace FastDownloader
                 long totalRemaining = Segments.Where(f => f.State == DownloadState.TransferInProgress).Sum(f => f.Remaining);
             
                 double etaSeconds = (totalSpeed > 0) ? totalRemaining / averageSpeedBytes : 0;
-                string logString = $"TOTAL REMAINING IS {totalRemaining}. totalSpeed is {totalSpeed}. etaSeconds {etaSeconds}";
-                NetStatsLogger.Log(logString);
-                if (totalRemaining == 0)
-                {
-                    TimeLeft = "Done";
-                }
-                else if (etaSeconds < 60)
-                {
-                    TimeLeft = $"{etaSeconds:F0} seconds";
-                }
-                else
-                {
-                    TimeLeft = $"{(int)(etaSeconds / 60)} min {((int)etaSeconds % 60)} sec";
-                }
+
+                NetworkStatisticsHelper.Update();
+                TimeLeft = NetworkStatisticsHelper.GetETAString();
+
+                PackageSize = ToHumanReadableSize(NetworkStatisticsHelper.TotalBytes);
+                PackageRemaining = ToHumanReadableSize(NetworkStatisticsHelper.RemainingBytes());
 
                 OnPropertyChanged(nameof(RemainingTotal));
                 OnPropertyChanged(nameof(SummaryDownloaded));
@@ -324,15 +333,14 @@ namespace FastDownloader
                 fileStream.Write(buffer, 0, httpStreamRead);
                 totalRead += httpStreamRead;
                 long tmpRemaining = totalBytes - totalRead;
-                segment.Downloaded = totalRead;
+                segment.Receive(httpStreamRead);
 
                 if ((tick++ % 10) == 0)
                 {
+                    segment.Update();
                     var totalSpeedLogString = NetworkStatisticsHelper.GetTotalSpeedString();
                     var etaLogString = NetworkStatisticsHelper.GetETAString();
                     var segmentSpeedLogString = segment.GetSpeedString();
-                    //string logString = $"TOTAL SPEED IS {totalSpeedLogString}. ETA is {etaLogString}. Segment Speed is {segmentSpeedLogString}";
-                    //NetStatsLogger.Log(logString);
 
                     if (totalBytes > 0)
                     {
@@ -535,7 +543,7 @@ namespace FastDownloader
 
                 GlobalTimer.Stop();
                 string globalDuration = $"{GlobalTimer.Elapsed.TotalSeconds:F2}s";
-
+                NetworkStatisticsHelper.SetCompleted();
                 MessageBox.Show($"All downloads completed in {globalDuration}.");
             }
             catch (Exception ex)
@@ -546,7 +554,30 @@ namespace FastDownloader
 
         private void btnShowDetails_Click(object sender, RoutedEventArgs e)
         {
+            _detailsShown = !_detailsShown;
+            ShowDetailsControls(_detailsShown);
+        }
+        private void ShowDetailsControls(bool show)
+        {
+            if (show)
+            {
+                if (FilesListDetails.Visibility == Visibility.Collapsed)
+                {
+                    FilesListDetails.Visibility = Visibility.Visible;
+                    btnShowDetails.Content = "<< Hide Details";
+                    this.Height = _expandedHeight;
+                }
+            }
+            else
+            {
+                if (FilesListDetails.Visibility == Visibility.Visible)
+                {
+                    FilesListDetails.Visibility = Visibility.Collapsed;
+                    btnShowDetails.Content = "Show Details >>";
+                    this.Height = _collapsedHeight;
+                }
 
+            }
         }
     }
 
