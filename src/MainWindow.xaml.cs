@@ -14,11 +14,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Animation;
 using static System.Net.WebRequestMethods;
 using static System.Windows.Forms.AxHost;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Header;
 
-
+#pragma warning disable CS8632
 namespace FastDownloader
 {
     public static class Config
@@ -32,10 +33,24 @@ namespace FastDownloader
         Idle = 0,
         Initialized = 1,
         TransferInProgress = 2,
-        Completed = 3,
-        ErrorOccured =4 ,
-        MAX = 5
+        Paused = 3,
+        Cancelled = 4,
+        Completed = 5,
+        ErrorOccured = 6,
+        MAX = 7
     }
+    public enum FastDownloaderStatus
+    {
+        Idle = 0,
+        Initialized = 1,
+        TransferInProgress = 2,
+        Paused = 3,
+        Cancelled = 4,
+        Completed = 5,
+        ErrorOccured = 6,
+        MAX = 7
+    }
+
     public class File
     {
         public int Index { get; set; }
@@ -76,13 +91,15 @@ namespace FastDownloader
     {
         public ObservableCollection<FileDownloadItem> Segments { get; set; } = new();
         public string DownloadPath { get; set; } = "C:\\tmp";
-        public string PackagePath { get; set; } = "C:\\tmp\\bmw_installer_package.rar.aes";
+        
         public bool GlobalTransferStarted { get; set; } = false;
         public Stopwatch GlobalTimer { get; set; } = new Stopwatch();
         public Stopwatch EtaTimer { get; set; } = new Stopwatch();
         public NetworkStatsHelper NetworkStatisticsHelper = new NetworkStatsHelper();
         public event PropertyChangedEventHandler PropertyChanged;
         private bool _detailsShown = true;
+        private FastDownloaderStatus CurrentStatus;
+
         private double _collapsedHeight = 240; // Set this to your "collapsed" height
         private double _expandedHeight = 560;  // Set this to your "expanded" height
         protected void OnPropertyChanged(string name) =>
@@ -161,9 +178,9 @@ namespace FastDownloader
             _uiTimer.Interval = TimeSpan.FromMilliseconds(500);
             _uiTimer.Tick += (s, e) => UpdateStats();
             _uiTimer.Start();
-
-            NetStatsLogger.Log($"FastDownloader Initialize ");
-            LoadPackageInfoFromResource();
+            CurrentStatus = FastDownloaderStatus.Idle;
+            //NetStatsLogger.Log($"FastDownloader Initialize ");
+            //LoadPackageInfoFromResource();
 
         }
         private void UpdateStats()
@@ -228,7 +245,11 @@ namespace FastDownloader
             try
             {
                 // Resource name must match what is embedded
+#if TEST_ERROR
+                string resourceName = "FastDownloader.res.bmw-advanced-tools-error.json";
+#else
                 string resourceName = "FastDownloader.res.bmw-advanced-tools.json";
+#endif
                 string jsonString = "";
 
                 var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -295,7 +316,7 @@ namespace FastDownloader
             response.EnsureSuccessStatusCode();
 
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(downloadPath)!);
-            NetStatsLogger.Log($"DOWNLOAD FILE {file.DownloadUrl}. {file.Size} bytes");
+            //NetStatsLogger.Log($"DOWNLOAD FILE {file.DownloadUrl}. {file.Size} bytes");
 
             using var httpStream = await response.Content.ReadAsStreamAsync();
 
@@ -356,7 +377,7 @@ namespace FastDownloader
             }
 
 
-            NetStatsLogger.Log("DONE");
+            //NetStatsLogger.Log("DONE");
             sw.Stop();
 
             updateState?.Invoke(DownloadState.Completed);
@@ -498,8 +519,17 @@ namespace FastDownloader
                             }
                         });
                     };
+
+                    // We need to set all the non completed transfers has cancelled and quit
+                    if (CanContinue() == false)
+                    {
+                        Application.Current.Dispatcher.Invoke(CancelAllNonCompletedSegments);
+                        return;
+                    }
+
                     var fileInfo = await DownloadFile(file, rootDirectory, ct, updateState, reportProgress, startTransfer, transferCompleted);
                     fileInfoBag.Add(fileInfo);
+
                 }
                 finally
                 {
@@ -511,13 +541,32 @@ namespace FastDownloader
 
             return fileInfoBag.ToList();
         }
+        private void CancelAllNonCompletedSegments()
+        {
+            foreach (var seg in Segments)
+            {
+                if (seg.State != DownloadState.Completed)
+                {
+                    seg.State = DownloadState.Cancelled;
+                    seg.Status = "Cancelled";
+                    seg.Progress = 0;
+                    seg.Remaining = seg.Size;
+                    seg.RemainingString = ToHumanReadableSize(seg.Size);
+                }
+            }
+        }
 
         private async void StartDownload_Click(object sender, RoutedEventArgs e)
+        {
+            await StartDownloadFiles();
+        }
+
+        public async Task<bool> StartDownloadFiles()
         {
             try
             {
                 GlobalTimer.Start();
-                
+
                 string downloadRoot = this.DownloadPath;
                 Directory.CreateDirectory(downloadRoot);
 
@@ -540,18 +589,19 @@ namespace FastDownloader
                         // Status already updated in DownloadFile
                     }
                 }
-
+                SetCompleted();
                 GlobalTimer.Stop();
                 string globalDuration = $"{GlobalTimer.Elapsed.TotalSeconds:F2}s";
                 NetworkStatisticsHelper.SetCompleted();
                 MessageBox.Show($"All downloads completed in {globalDuration}.");
+                return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error downloading files: {ex.Message}");
             }
+            return false;
         }
-
         private void btnShowDetails_Click(object sender, RoutedEventArgs e)
         {
             _detailsShown = !_detailsShown;
@@ -578,6 +628,36 @@ namespace FastDownloader
                 }
 
             }
+        }
+
+        private void btnCancel_Click(object sender, RoutedEventArgs e)
+        {
+            CurrentStatus = FastDownloaderStatus.Cancelled;
+        }
+
+        private void btnPause_Click(object sender, RoutedEventArgs e)
+        {
+            CurrentStatus = FastDownloaderStatus.Paused;
+        }
+        private bool IsPaused()
+        {
+            return (CurrentStatus == FastDownloaderStatus.Paused);
+        }
+        private bool IsCancelled()
+        {
+            return (CurrentStatus == FastDownloaderStatus.Cancelled);
+        }
+        private bool CanContinue()
+        {
+            return !(IsCancelled() || IsPaused());
+        }
+        private void SetCompleted()
+        {
+            CurrentStatus = FastDownloaderStatus.Completed;
+        }
+        private bool IsCompleted()
+        {
+            return (CurrentStatus == FastDownloaderStatus.Completed);
         }
     }
 
@@ -649,3 +729,5 @@ namespace FastDownloader
     }
 
 }
+
+#pragma warning restore CS8632

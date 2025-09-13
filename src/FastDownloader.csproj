@@ -8,16 +8,13 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="res\bmw-advanced-tools.json" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="res\bmw-advanced-tools.json" />
-  </ItemGroup>
-  <ItemGroup>
     <Page Include="MainWindow.xaml" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="res\" />
   </ItemGroup>
 </Project>

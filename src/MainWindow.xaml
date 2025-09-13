@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Download Files" Height="354" Width="849"
         WindowStartupLocation="CenterScreen"
-        Background="#FAFAFA">
+        Background="#FAFAFA" ResizeMode="NoResize">
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -125,8 +125,9 @@
             </Grid.ColumnDefinitions>
 
             <Button x:Name="btnShowDetails" Grid.Column="0" Content="&lt;&lt; Hide Details" Height="32" Margin="10,0,687,0" Click="btnShowDetails_Click"/>
-            <Button Content="Pause" Height="32" Margin="561,0,146,0" RenderTransformOrigin="0.178,0.567"/>
-            <Button Content="Cancel" Height="32" Click="StartDownload_Click" HorizontalAlignment="Left" Width="97" Margin="690,0,0,0"/>
+            <Button x:Name="btnPause" Content="Pause" Height="32" Margin="561,0,146,0" RenderTransformOrigin="0.178,0.567" Click="btnPause_Click"/>
+            <Button x:Name="btnCancel" Content="Cancel" Height="32" HorizontalAlignment="Left" Width="97" Margin="690,0,0,0" Click="btnCancel_Click"/>
+            <Button x:Name="btnTest" Click="StartDownload_Click" Content="START TEST" Height="32" Margin="433,0,274,0" RenderTransformOrigin="0.178,0.567" Background="#FFFF3E2B" FontWeight="Bold" FontFamily="Segoe Script" Visibility="Hidden"/>
         </Grid>
 
         <!-- Segment Details DataGrid -->
