@@ -15,7 +15,10 @@ param(
     [switch]$Release,
     [Parameter(Mandatory = $false)]
     [Alias("c")]
-    [switch]$Clean
+    [switch]$Clean,
+    [Parameter(Mandatory = $false)]
+    [Alias("i")]
+    [switch]$Init
 )
 if (($Debug) -and ($Release)) {
     Write-Host "[ERROR] " -n -f DarkRed
@@ -25,22 +28,33 @@ if (($Debug) -and ($Release)) {
 
 $ProjectPath = (Resolve-Path -Path "$PSScriptRoot").Path
 $scriptsPath = Join-Path $ProjectPath "scripts"
+$CommonScriptPath = Join-Path $scriptsPath "Common.ps1"
 $libsPath = Join-Path $ProjectPath "libs"
 $BuildPath = Join-Path $ProjectPath "src"
 $BinPath = Join-Path $BuildPath "bin"
 $ObjPath = Join-Path $BuildPath "obj"
 $ArtifactsPath = Join-Path $BuildPath "artifacts"
+$DeployFinalPath = "C:\Dev\packages-vault\libs\FastDownload-Ctrl"
+
 
 if ($Clean) {
     Write-Host "=========================================================" -f DarkGray
     Write-Host "  CLEANING UP BUILD FILES ...`n" -f White
+    Write-Host "  ✔️ $DeployFinalPath " -f DarkCyan
     Write-Host "  ✔️ $BinPath " -f DarkCyan
     Write-Host "  ✔️ $ObjPath " -f DarkCyan
     Write-Host "  ✔️ $ArtifactsPath " -f DarkCyan
+    Remove-Item -Path "$DeployFinalPath" -Recurse -Force -ErrorAction Ignore | Out-Null
     Remove-Item -Path "$BinPath" -Recurse -Force -ErrorAction Ignore | Out-Null
     Remove-Item -Path "$ObjPath" -Recurse -Force -ErrorAction Ignore | Out-Null
     Remove-Item -Path "$ArtifactsPath" -Recurse -Force -ErrorAction Ignore | Out-Null
 }
+
+Write-Host "=========================================================" -f DarkGray
+Write-Host "  CREATING DEPLOY PATH  ...`n" -f Yellow
+Write-Host "  ✔️ $DeployFinalPath " -f Blue
+New-Item -Path "$DeployFinalPath" -ItemType Directory -Force -EA Ignore | Out-Null
+Write-Host "=========================================================" -f DarkGray
 
 if ($Release) {
     $Target = "Release"
@@ -66,7 +80,8 @@ Write-Host "  ✔️  Including Script $BuildQueueScript" -f DarkCyan
 Write-Host "  ✔️  Including Script $BuildRequestScript" -f DarkCyan
 . "$BuildRequestScript"
 
-Initialize-RegistryProjectPathProperties "ExtensionItemCtrl"
+. "$CommonScriptPath" -Reset
+
 
 Write-Host "=========================================================" -f DarkGray
 Write-Host " Dependencies...`n" -f DarkGray
@@ -91,7 +106,7 @@ while (BuildsRemaining) {
     StartBuild $BuildRequest
 }
 
-[System.Management.Automation.PathInfo]$pi = Resolve-Path -Path "libs\FastDownloader" -RelativeBasePath "..\.." -ErrorAction Ignore
+[System.Management.Automation.PathInfo]$pi = Resolve-Path -Path "libs\FastDownload-Ctrl" -RelativeBasePath "..\.." -ErrorAction Ignore
 if (($pi) -and ($pi.Path)) {
     $DestinationDeployPath = $pi.Path
 

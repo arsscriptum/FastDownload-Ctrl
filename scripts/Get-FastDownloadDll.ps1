@@ -21,7 +21,7 @@ function Get-FastDownloadDllPath {
 
     try {
         Write-Verbose "[Get-FastDownloadDllPath] $ENV:Target"
-        $LibBasename = "WebExtensionPack.Controls"
+        $LibBasename = "FastDownloader"
         $LibName = "{0}.dll" -f $LibBasename
 
 
