@@ -1,4 +1,5 @@
 ﻿using FastDownloader;
+using Microsoft.Diagnostics.Tracing.Analysis.JIT;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -39,7 +40,9 @@ namespace FastDownloader
         public int Index { get; set; }
         public string DownloadUrl { get; set; } = "";
         public string ParentFolder { get; set; } = "";
+        public long Size { get; set; }
     }
+
     public class SegmentInfo
     {
         public string PackageId { get; set; } = "";
@@ -73,8 +76,10 @@ namespace FastDownloader
         public ObservableCollection<FileDownloadItem> Segments { get; set; } = new();
         public string DownloadPath { get; set; } = "C:\\tmp";
         public string PackagePath { get; set; } = "C:\\tmp\\bmw_installer_package.rar.aes";
-        public DateTime StartTime { get; set; } = DateTime.Now;
+        public bool GlobalTransferStarted { get; set; } = false;
         public Stopwatch GlobalTimer { get; set; } = new Stopwatch();
+        public Stopwatch EtaTimer { get; set; } = new Stopwatch();
+        public NetworkStatsHelper NetworkStatisticsHelper = new NetworkStatsHelper();
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -84,7 +89,15 @@ namespace FastDownloader
         public int DownloadedSegments
         {
             get => _downloadedSegments;
-            set { _downloadedSegments = value; OnPropertyChanged(nameof(DownloadedSegments)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(SummaryDownloaded)); }
+            set { _downloadedSegments = value; OnPropertyChanged(nameof(DownloadedSegments)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(OverallProgress)); }
+        }
+        public string RemainingTotal
+        {
+            get
+            {
+                long totalRemaining = Segments.Sum(s => s.Remaining);
+                return ToHumanReadableSize(totalRemaining);
+            }
         }
 
         private int _totalSegments = 0;
@@ -93,21 +106,101 @@ namespace FastDownloader
             get => _totalSegments;
             set { _totalSegments = value; OnPropertyChanged(nameof(TotalSegments)); OnPropertyChanged(nameof(SummaryDownloaded)); OnPropertyChanged(nameof(SummaryDownloaded)); }
         }
+        private string _transferRate = "0 KB/s";
+        public string TransferRate
+        {
+            get => _transferRate;
+            set { _transferRate = value; OnPropertyChanged(nameof(TransferRate)); }
+        }
+        private string _timeLeft = "";
+        public string TimeLeft
+        {
+            get => _timeLeft;
+            set { _timeLeft = value; OnPropertyChanged(nameof(TimeLeft)); }
+        }
+        private readonly System.Windows.Threading.DispatcherTimer _uiTimer = new System.Windows.Threading.DispatcherTimer();
+
 
         public string SummaryDownloaded => $"{DownloadedSegments} / {TotalSegments} segments";
 
-        // Add this:
-        public double OverallProgress => TotalSegments == 0 ? 0 : (double)DownloadedSegments / TotalSegments * 100;
+        public double OverallProgress
+        {
+            get
+            {
+                if (Segments.Count == 0)
+                    return 0;
+                // Average of all per-file progress (each 0–100)
+                double total = Segments.Sum(seg => seg.Progress);
+                return total / Segments.Count;
+            }
+        }
+
 
         public MainWindow()
         {
              
             //InitializeComponent();
-            DataContext = this;
+            DataContext = this; 
+            _uiTimer.Interval = TimeSpan.FromMilliseconds(2500);
+            _uiTimer.Tick += (s, e) => UpdateStats();
+            _uiTimer.Start();
 
+            NetStatsLogger.Log($"FastDownloader Initialize ");
             LoadPackageInfoFromResource();
 
         }
+        private void UpdateStats()
+        {
+            if (GlobalTransferStarted)
+            {
+                long totalDownloaded = Segments.Sum(f => f.Size - f.Remaining);
+
+                double seconds = EtaTimer.Elapsed.TotalSeconds;
+
+
+
+                double totalSpeed = Segments.Where(f => f.State == DownloadState.TransferInProgress).Sum(f => f.SpeedValue);
+                int count = Segments.Count(f => f.State == DownloadState.TransferInProgress);
+
+                double averageSpeed = (count > 0) ? totalSpeed / count : 0;
+
+                double averageSpeedBytes = averageSpeed;
+                double averageSpeedKB = averageSpeed / 1024.0;
+                double averageSpeedMB = averageSpeedKB / 1024.0;
+
+                if (averageSpeedMB > 1)
+                {
+                    TransferRate = $"{averageSpeedMB:F2} MB/s";
+                }
+                else
+                {
+                    TransferRate = $"{averageSpeedKB:F2} KB/s";
+                }
+                long totalRemaining = Segments.Where(f => f.State == DownloadState.TransferInProgress).Sum(f => f.Remaining);
+            
+                double etaSeconds = (totalSpeed > 0) ? totalRemaining / averageSpeedBytes : 0;
+                string logString = $"TOTAL REMAINING IS {totalRemaining}. totalSpeed is {totalSpeed}. etaSeconds {etaSeconds}";
+                NetStatsLogger.Log(logString);
+                if (totalRemaining == 0)
+                {
+                    TimeLeft = "Done";
+                }
+                else if (etaSeconds < 60)
+                {
+                    TimeLeft = $"{etaSeconds:F0} seconds";
+                }
+                else
+                {
+                    TimeLeft = $"{(int)(etaSeconds / 60)} min {((int)etaSeconds % 60)} sec";
+                }
+
+                OnPropertyChanged(nameof(RemainingTotal));
+                OnPropertyChanged(nameof(SummaryDownloaded));
+                OnPropertyChanged(nameof(RemainingTotal));
+            }
+ 
+        }
+
         public static string ToHumanReadableSize(long bytes)
         {
             if (bytes < 1024) return $"{bytes} B";
@@ -137,10 +230,14 @@ namespace FastDownloader
                 }
 
                 var files = LoadJsonPackageInfo(jsonString);
+                Segments.Clear();
                 foreach (var f in files)
                 {
                     Segments.Add(f);
                 }
+                TotalSegments = Segments.Count;
+                DownloadedSegments = 0;
+
             }
             catch (Exception ex)
             {
@@ -157,9 +254,12 @@ namespace FastDownloader
             if (model == null || model.Parts == null)
                 throw new Exception("JSON is invalid or missing listparts.");
 
+            NetworkStatisticsHelper.Init(model.Size);
+
             // Convert JSON URLs into FileDownloadItem objects
             var files = model.Parts.Select(p => new FileDownloadItem
             {
+                
                 SegmentNumber = p.Index + 1,
                 Url = p.Url,
                 FileName = Path.GetFileName(p.Url),
@@ -170,6 +270,7 @@ namespace FastDownloader
                 Progress = 0
             }).ToList();
 
+          
             return files;
         }
 
@@ -185,7 +286,7 @@ namespace FastDownloader
             response.EnsureSuccessStatusCode();
 
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(downloadPath)!);
-
+            NetStatsLogger.Log($"DOWNLOAD FILE {file.DownloadUrl}. {file.Size} bytes");
 
             using var httpStream = await response.Content.ReadAsStreamAsync();
 
@@ -195,15 +296,24 @@ namespace FastDownloader
             var buffer = new byte[81920];
             long totalRead = 0;
             var totalBytes = response.Content.Headers.ContentLength ?? -1;
-            bool xferStarted = false;
+            bool fileTransferStarted = false;
 
-
+            int tick = 0;
             int httpStreamRead = await httpStream.ReadAsync(buffer, 0, buffer.Length, ct);
+
+            var segment = NetworkStatisticsHelper.AddSegment(fileName, file.Size);
+            
+
             while (httpStreamRead > 0)
             {
-                if(xferStarted == false)
+                if (fileTransferStarted == false)
                 {
-                    xferStarted = true;
+                    NetworkStatisticsHelper.Start();
+
+                    EtaTimer.Start();
+                    GlobalTransferStarted = true;
+
+                    fileTransferStarted = true;
                     startTransfer?.Invoke(file.Index);
                     updateState?.Invoke(DownloadState.TransferInProgress);
                     reportProgress?.Invoke(0, 0, 0);
@@ -214,28 +324,35 @@ namespace FastDownloader
                 fileStream.Write(buffer, 0, httpStreamRead);
                 totalRead += httpStreamRead;
                 long tmpRemaining = totalBytes - totalRead;
+                segment.Downloaded = totalRead;
 
-                if (totalBytes > 0)
+                if ((tick++ % 10) == 0)
                 {
-                    int percent = (int)(totalRead * 100 / totalBytes);
-                    reportProgress?.Invoke(percent, tmpRemaining, totalBytes);
+                    var totalSpeedLogString = NetworkStatisticsHelper.GetTotalSpeedString();
+                    var etaLogString = NetworkStatisticsHelper.GetETAString();
+                    var segmentSpeedLogString = segment.GetSpeedString();
+                    //string logString = $"TOTAL SPEED IS {totalSpeedLogString}. ETA is {etaLogString}. Segment Speed is {segmentSpeedLogString}";
+                    //NetStatsLogger.Log(logString);
+
+                    if (totalBytes > 0)
+                    {
+                        int percent = (int)(totalRead * 100 / totalBytes);
+                        reportProgress?.Invoke(percent, tmpRemaining, totalBytes);
+                    }
+                    else
+                    {
+                        reportProgress?.Invoke(0, 0, 0);
+                    }
                 }
-                else
-                {
-                    reportProgress?.Invoke(0, 0, 0);
-                }
+
             }
 
- 
 
- 
+            NetStatsLogger.Log("DONE");
             sw.Stop();
-            //
 
-
-            // Format download time
-           
             updateState?.Invoke(DownloadState.Completed);
+            DownloadedSegments++;
 
             return new FileInfo(downloadPath);
         }
@@ -271,12 +388,12 @@ namespace FastDownloader
                                         break;
                                     case DownloadState.Initialized:
                                         var durationQueuedWait = matchingItem.FileTimer.Elapsed;
-                                        string durationQueuedWaitStr = $" Queued for {durationQueuedWait.TotalMilliseconds:F2} ms";
+                                        string durationQueuedWaitStr = $" Queued";
                                         matchingItem.Status = durationQueuedWaitStr;
                                         break;
                                    case DownloadState.TransferInProgress:
                                         matchingItem.TransferStarted = true;
-                                        matchingItem.StartTime = DateTime.Now;
+                                       
                                         var durationQueued = matchingItem.FileTimer.Elapsed;
 
                                         string durationQueuedStr = $" Started after {durationQueued.TotalMilliseconds:F2} ms";
@@ -293,7 +410,7 @@ namespace FastDownloader
                                         matchingItem.Remaining = 0;
                                         break;
                                     case DownloadState.ErrorOccured:
-                                        string errorstr = $" ❌ Error Occured {matchingItem.LastErrorId}";
+                                        string errorstr = $" Error Occured {matchingItem.LastErrorId}";
                                         matchingItem.Status = errorstr;
                                         break;
                                     default:
@@ -311,6 +428,9 @@ namespace FastDownloader
                         {
                             if (matchingItem != null)
                             {
+                                
+                                // Notify UI to update main progress bar
+                                OnPropertyChanged(nameof(OverallProgress));
 
                                 string xferingStr = $" Transferring...";
                                 matchingItem.Status = xferingStr;
@@ -321,15 +441,25 @@ namespace FastDownloader
                                 matchingItem.Remaining = remaining;
 
                                 // Calculate speed in KB/s, protect against division by zero
-                                double speedKbelapsedMilliseconds = (elapsedMilliseconds > 0)
-                                           ? downloadedBytes / 1024.0 / elapsedMilliseconds
-                                           : 0;
+                                double speedKbelapsedMilliseconds = (elapsedMilliseconds > 0) ? downloadedBytes / 1024.0 / elapsedMilliseconds : 0;
+                                double speedMbelapsedMilliseconds = (elapsedMilliseconds > 0) ? downloadedBytes / 1024.0 / 1024.0 / elapsedMilliseconds : 0;
                                 double speedKbSec = speedKbelapsedMilliseconds * 1000;
-                                matchingItem.Speed = $"{speedKbSec:F1} KB/s";
+                                double speedMbSec = speedMbelapsedMilliseconds * 1000;
+                                
                                 matchingItem.Progress = percent;
                                 matchingItem.RemainingString = ToHumanReadableSize(remaining);
-               
-                                
+
+                                if (speedMbSec > 1)
+                                {
+                                    matchingItem.Speed = $"{speedMbSec:F1} MB/s";
+                                }
+                                else
+                                {
+                                    matchingItem.Speed = $"{speedKbSec:F1} KB/s";
+                                }
+
+                                double speedBytesPerSec = (elapsedMilliseconds > 0) ? downloadedBytes / (elapsedMilliseconds / 1000.0): 0;
+                                matchingItem.SpeedValue = speedBytesPerSec;
 
                             }
                         });
@@ -357,8 +487,6 @@ namespace FastDownloader
                                 matchingItem.Remaining = 0; 
                                 matchingItem.RemainingString = ToHumanReadableSize(0);
                                 matchingItem.Progress = 100;
-
-
                             }
                         });
                     };
@@ -381,8 +509,7 @@ namespace FastDownloader
             try
             {
                 GlobalTimer.Start();
-                StartTime = DateTime.Now;
-
+                
                 string downloadRoot = this.DownloadPath;
                 Directory.CreateDirectory(downloadRoot);
 
@@ -390,7 +517,8 @@ namespace FastDownloader
                 {
                     Index = f.SegmentNumber,
                     DownloadUrl = f.Url,
-                    ParentFolder = ""
+                    ParentFolder = "",
+                    Size = f.Size
                 }).ToList();
 
                 var downloadedFiles = await DownloadFiles(segs, downloadRoot);
@@ -416,7 +544,10 @@ namespace FastDownloader
             }
         }
 
+        private void btnShowDetails_Click(object sender, RoutedEventArgs e)
+        {
 
+        }
     }
 
 
@@ -431,8 +562,10 @@ namespace FastDownloader
         public string Url { get; set; } = "";
         public string FileName { get; set; } = "";
         public DateTime CompletionTime { get; set; } = new DateTime();
-        public DateTime StartTime { get; set; } = new DateTime();
+      
         public Stopwatch FileTimer { get; set; } = new Stopwatch();
+        public double SpeedValue { get; set; } = 0;  // Holds speed in bytes/sec for calculation
+
 
         public string Status
         {
