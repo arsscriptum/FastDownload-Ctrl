@@ -208,7 +208,9 @@ namespace FastDownloader
                     return 0;
                 // Average of all per-file progress (each 0–100)
                 double total = Segments.Sum(seg => seg.Progress);
-                return total / Segments.Count;
+                int newVal = (int)(total / Segments.Count); // truncates decimal
+                ProgressCallback?.Invoke(this, newVal);
+                return newVal;
             }
         }
 
@@ -599,7 +601,7 @@ namespace FastDownloader
                                 double speedMbSec = speedMbelapsedMilliseconds * 1000;
                                 
                                 matchingItem.Progress = percent;
-                                ProgressCallback?.Invoke(this, percent); // percentValue: int (0-100)
+                                
 
                                 matchingItem.RemainingString = ToHumanReadableSize(remaining);
 
