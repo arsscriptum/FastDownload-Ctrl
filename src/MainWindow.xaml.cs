@@ -1,4 +1,5 @@
-﻿using FastDownloader;
+﻿using CommandLine;
+using FastDownloader;
 using Microsoft.Diagnostics.Tracing.Analysis.JIT;
 using System;
 using System.Collections.Concurrent;
@@ -33,11 +34,13 @@ namespace FastDownloader
         Idle = 0,
         Initialized = 1,
         TransferInProgress = 2,
-        Paused = 3,
-        Cancelled = 4,
-        Completed = 5,
-        ErrorOccured = 6,
-        MAX = 7
+        Pausing = 3,
+        Paused = 4,
+        Cancelling = 5,
+        Cancelled = 6,
+        Completed = 7,
+        ErrorOccured = 8,
+        MAX = 9
     }
     public enum FastDownloaderStatus
     {
@@ -97,11 +100,11 @@ namespace FastDownloader
         public Stopwatch EtaTimer { get; set; } = new Stopwatch();
         public NetworkStatsHelper NetworkStatisticsHelper = new NetworkStatsHelper();
         public event PropertyChangedEventHandler PropertyChanged;
-        private bool _detailsShown = true;
+        private bool _detailsShown = false;
         private FastDownloaderStatus CurrentStatus;
 
         private double _collapsedHeight = 240; // Set this to your "collapsed" height
-        private double _expandedHeight = 560;  // Set this to your "expanded" height
+        private double _maxExpandedHeight = 560;  // Set this to your "expanded" height
         protected void OnPropertyChanged(string name) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
@@ -173,12 +176,14 @@ namespace FastDownloader
         public MainWindow()
         {
              
-            //InitializeComponent();
+            InitializeComponent();
             DataContext = this; 
             _uiTimer.Interval = TimeSpan.FromMilliseconds(500);
             _uiTimer.Tick += (s, e) => UpdateStats();
             _uiTimer.Start();
             CurrentStatus = FastDownloaderStatus.Idle;
+            this.Closed += (s, e) => Application.Current?.Shutdown();
+            ShowDetailsControls(false);
             //NetStatsLogger.Log($"FastDownloader Initialize ");
             //LoadPackageInfoFromResource();
 
@@ -275,6 +280,36 @@ namespace FastDownloader
             }
         }
 
+        public void LoadPackageInfoFromFile(string jsonFilePath)
+        {
+            try
+            {
+                // Resource name must match what is embedded
+                if (!System.IO.File.Exists(jsonFilePath))
+                {
+                    Console.Error.WriteLine("[Error] JSON file not found: " + jsonFilePath);
+                    Environment.Exit(1);
+                }
+
+                var win = new FastDownloader.MainWindow();
+                string jsonString = System.IO.File.ReadAllText(jsonFilePath);
+
+
+                var files = LoadJsonPackageInfo(jsonString);
+                Segments.Clear();
+                foreach (var f in files)
+                {
+                    Segments.Add(f);
+                }
+                TotalSegments = Segments.Count;
+                DownloadedSegments = 0;
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to load JSON file: {ex.Message}");
+            }
+        }
 
         public List<FileDownloadItem> LoadJsonPackageInfo(string jsonString)
         {
@@ -302,6 +337,18 @@ namespace FastDownloader
 
           
             return files;
+        }
+
+        public FileInfo ProcessCancelledFile(File file, string rootDirectory, CancellationToken ct = default, Action<DownloadState>? updateState = null)
+        {
+            
+            updateState?.Invoke(DownloadState.Cancelled);
+
+            string fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+            string downloadPath = System.IO.Path.Combine(rootDirectory, fileName);
+
+
+            return new FileInfo(downloadPath);
         }
 
         public async Task<FileInfo> DownloadFile( File file, string rootDirectory, CancellationToken ct = default, Action<DownloadState>? updateState = null, Action<int, long, long>? reportProgress = null, Action<int>? startTransfer = null, Action<int>? transferCompleted = null)
@@ -336,6 +383,12 @@ namespace FastDownloader
 
             while (httpStreamRead > 0)
             {
+                if (IsCancelled())
+                {
+                    updateState?.Invoke(DownloadState.Cancelled);
+                    return new FileInfo(downloadPath);
+
+                }
                 if (fileTransferStarted == false)
                 {
                     NetworkStatisticsHelper.Start();
@@ -415,6 +468,22 @@ namespace FastDownloader
                                 {
                                     case DownloadState.Idle:
                                         break;
+                                    case DownloadState.Cancelled:
+                                        matchingItem.Status = " ❌ Cancelled";
+                                 
+                                        matchingItem.CompletionTime = DateTime.Now;
+                                        matchingItem.Remaining = 100;
+                                        matchingItem.RemainingString = ToHumanReadableSize(0);
+                                        matchingItem.Progress = 0;
+                                        break;
+                                    case DownloadState.Paused:
+                                        matchingItem.Status = "PAUSED";
+                                     
+                                        matchingItem.CompletionTime = DateTime.Now;
+                                        matchingItem.Remaining = 100;
+                                        matchingItem.RemainingString = ToHumanReadableSize(0);
+                                        matchingItem.Progress = 0;
+                                        break;
                                     case DownloadState.Initialized:
                                         var durationQueuedWait = matchingItem.FileTimer.Elapsed;
                                         string durationQueuedWaitStr = $" Queued";
@@ -430,6 +499,8 @@ namespace FastDownloader
                                         matchingItem.FileTimer.Restart();
                                         break;
                                     case DownloadState.Completed:
+                                        matchingItem.State = DownloadState.Completed;
+
                                         var duration = matchingItem.FileTimer.Elapsed;
                                         string durationStr = $" Transfered in {duration.TotalMilliseconds:F2} ms";
                                         matchingItem.Status = durationStr;
@@ -510,25 +581,39 @@ namespace FastDownloader
                         {
                             if (matchingItem != null)
                             {
+
                                 matchingItem.State = DownloadState.Completed;
-                                DateTime nowDoneTime = DateTime.Now;
-                                matchingItem.CompletionTime = nowDoneTime;
-                                matchingItem.Remaining = 0; 
-                                matchingItem.RemainingString = ToHumanReadableSize(0);
+
+                                var duration = matchingItem.FileTimer.Elapsed;
+                                string durationStr = $" Transfered in {duration.TotalMilliseconds:F2} ms";
+                                matchingItem.Status = durationStr;
                                 matchingItem.Progress = 100;
+                                matchingItem.RemainingString = ToHumanReadableSize(0);
+
+                                matchingItem.Remaining = 0;
+
+
                             }
                         });
                     };
 
                     // We need to set all the non completed transfers has cancelled and quit
-                    if (CanContinue() == false)
+                    if (CanContinue())
                     {
-                        Application.Current.Dispatcher.Invoke(CancelAllNonCompletedSegments);
-                        return;
+                        var fileInfo = await DownloadFile(file, rootDirectory, ct, updateState, reportProgress, startTransfer, transferCompleted);
+                        fileInfoBag.Add(fileInfo);
                     }
-
-                    var fileInfo = await DownloadFile(file, rootDirectory, ct, updateState, reportProgress, startTransfer, transferCompleted);
-                    fileInfoBag.Add(fileInfo);
+                    else
+                    {
+                        if (IsCancelled())
+                        {
+                            var fileInfo = ProcessCancelledFile(file, rootDirectory, ct, updateState);
+                            fileInfoBag.Add(fileInfo);
+                            
+                        }
+                    }
+            
+                    
 
                 }
                 finally
@@ -541,20 +626,42 @@ namespace FastDownloader
 
             return fileInfoBag.ToList();
         }
-        private void CancelAllNonCompletedSegments()
+        private int CancelAllNonCompletedSegments()
         {
+            int numCancelled = 0;
             foreach (var seg in Segments)
             {
                 if (seg.State != DownloadState.Completed)
                 {
-                    seg.State = DownloadState.Cancelled;
-                    seg.Status = "Cancelled";
+                    numCancelled++;
+                    seg.State = DownloadState.Cancelling;
+                    seg.Status = "Cancelling...";
                     seg.Progress = 0;
                     seg.Remaining = seg.Size;
                     seg.RemainingString = ToHumanReadableSize(seg.Size);
                 }
             }
+            btnCancel.IsEnabled = false;
+            return numCancelled;
         }
+        private int PauseAllNonCompletedSegments()
+        {
+            int numPaused = 0;
+            foreach (var seg in Segments)
+            {
+                if (seg.State != DownloadState.Completed)
+                {
+                    numPaused++;
+                    seg.State = DownloadState.Pausing;
+                    seg.Status = "Pausing...";
+                    seg.Progress = 0;
+                    seg.Remaining = seg.Size;
+                    seg.RemainingString = ToHumanReadableSize(seg.Size);
+                }
+            }
+            return numPaused;
+        }
+
 
         private async void StartDownload_Click(object sender, RoutedEventArgs e)
         {
@@ -579,6 +686,17 @@ namespace FastDownloader
                 }).ToList();
 
                 var downloadedFiles = await DownloadFiles(segs, downloadRoot);
+                GlobalTimer.Stop();
+                string globalDuration = $"{GlobalTimer.Elapsed.TotalSeconds:F2}s";
+                if (IsCancelled())
+                {
+                   
+                    var dlgErr = new ErrorDialog($"All downloads cancelled after {globalDuration}.", ErrorDialogMode.Cancelled);
+                    dlgErr.Owner = this; // sets parent window
+                    dlgErr.ShowDialog();
+                    this.Close();
+                    return true;
+                }
 
                 foreach (var fileInfo in downloadedFiles)
                 {
@@ -586,15 +704,17 @@ namespace FastDownloader
                     if (matchingFile != null)
                     {
                         matchingFile.Progress = 100;
-                        // Status already updated in DownloadFile
                     }
                 }
                 SetCompleted();
-                GlobalTimer.Stop();
-                string globalDuration = $"{GlobalTimer.Elapsed.TotalSeconds:F2}s";
                 NetworkStatisticsHelper.SetCompleted();
-                MessageBox.Show($"All downloads completed in {globalDuration}.");
+                var dlg = new SuccessDialog($"All downloads completed in {globalDuration}.");
+                dlg.Owner = this; // sets parent window
+                dlg.ShowDialog();
+
+                this.Close();
                 return true;
+
             }
             catch (Exception ex)
             {
@@ -615,7 +735,9 @@ namespace FastDownloader
                 {
                     FilesListDetails.Visibility = Visibility.Visible;
                     btnShowDetails.Content = "<< Hide Details";
-                    this.Height = _expandedHeight;
+                    var newH = _collapsedHeight + 40 + (TotalSegments * 20);
+                    if (newH > _maxExpandedHeight) { newH = _maxExpandedHeight; } 
+                    this.Height = newH;
                 }
             }
             else
@@ -632,12 +754,22 @@ namespace FastDownloader
 
         private void btnCancel_Click(object sender, RoutedEventArgs e)
         {
-            CurrentStatus = FastDownloaderStatus.Cancelled;
+            if(CurrentStatus == FastDownloaderStatus.Completed)
+            {
+                this.Close();
+            }
+            else
+            {
+                CurrentStatus = FastDownloaderStatus.Cancelled;
+                CancelAllNonCompletedSegments();
+            }
         }
 
         private void btnPause_Click(object sender, RoutedEventArgs e)
         {
             CurrentStatus = FastDownloaderStatus.Paused;
+            PauseAllNonCompletedSegments();
+        
         }
         private bool IsPaused()
         {
@@ -653,6 +785,7 @@ namespace FastDownloader
         }
         private void SetCompleted()
         {
+            btnCancel.Content = "Close";
             CurrentStatus = FastDownloaderStatus.Completed;
         }
         private bool IsCompleted()

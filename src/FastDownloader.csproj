@@ -7,7 +7,13 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
   <ItemGroup>
+    <None Remove="ErrorDialog.xaml" />
+    <None Remove="SuccessDialog.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="ErrorDialog.xaml" />
     <Page Include="MainWindow.xaml" />
+    <Page Include="SuccessDialog.xaml" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />

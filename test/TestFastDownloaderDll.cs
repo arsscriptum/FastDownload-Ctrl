@@ -1,14 +1,45 @@
-using System;
 using FastDownloader;
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Windows;      // Important
+
 class Program
 {
     [STAThread]
     static void Main(string[] args)
     {
-        // Path to the JSON file with download info
-        string jsonFile = @"C:\path\to\downloads.json";
+        try
+        {
+            if (System.Windows.Application.Current == null)
+                new System.Windows.Application();
 
-        // Call the static launcher in your DLL
-        FastDownloader.FastDownloaderDialog.ShowDialog(jsonFile);
+            string exeDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string jsonFile = Path.Combine(exeDir, "json", "bmw-advanced-tools.json");
+            Stopwatch _sw = new Stopwatch(); 
+            _sw.Start();
+            if (!System.IO.File.Exists(jsonFile))
+            {
+                Console.Error.WriteLine("[Error] JSON file not found: " + jsonFile);
+                Environment.Exit(1);
+            }
+
+            // Pass a callback for when the download is complete
+            FastDownloader.FastDownloaderDialog.ShowDialog(jsonFile, (bool success) =>
+            {
+                Console.WriteLine($"[INFO] Download completed. Success: {success}");
+                _sw.Stop();
+                string globalDuration = $"{_sw.Elapsed.TotalSeconds:F2}s";
+      
+                MessageBox.Show($"All downloads completed in {globalDuration}.");
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("[Exception] " + ex.Message);
+            Console.Error.WriteLine(ex.StackTrace);
+            Environment.Exit(2);
+        }
     }
 }

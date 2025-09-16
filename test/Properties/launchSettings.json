@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TestFastDownloaderDll": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Dev\\FastDownload-Ctrl\\test\\bin\\Debug\\net472"
+    }
+  }
+}
