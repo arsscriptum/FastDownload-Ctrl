@@ -24,9 +24,9 @@ class Program
                 Console.Error.WriteLine("[Error] JSON file not found: " + jsonFile);
                 Environment.Exit(1);
             }
-
+            string jsonString = System.IO.File.ReadAllText(jsonFile);
             // Pass a callback for when the download is complete
-            FastDownloader.FastDownloaderDialog.ShowDialog(jsonFile, (bool success) =>
+            FastDownloader.FastDownloaderDialog.ShowDialogFromContent(jsonString, (bool success) =>
             {
                 Console.WriteLine($"[INFO] Download completed. Success: {success}");
                 _sw.Stop();

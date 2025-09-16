@@ -295,7 +295,20 @@ namespace FastDownloader
                 string jsonString = System.IO.File.ReadAllText(jsonFilePath);
 
 
-                var files = LoadJsonPackageInfo(jsonString);
+                LoadPackageInfoFromFileContent(jsonString);
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to load JSON file: {ex.Message}");
+            }
+        }
+        public void LoadPackageInfoFromFileContent(string jsonContent)
+        {
+            try
+            {
+
+                var files = LoadJsonPackageInfo(jsonContent);
                 Segments.Clear();
                 foreach (var f in files)
                 {
@@ -310,7 +323,6 @@ namespace FastDownloader
                 MessageBox.Show($"Failed to load JSON file: {ex.Message}");
             }
         }
-
         public List<FileDownloadItem> LoadJsonPackageInfo(string jsonString)
         {
             
