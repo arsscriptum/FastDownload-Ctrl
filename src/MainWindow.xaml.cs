@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using FastDownloader;
 using Microsoft.Diagnostics.Tracing.Analysis.JIT;
+using Perfolizer.Metrology;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -102,6 +103,45 @@ namespace FastDownloader
         public event PropertyChangedEventHandler PropertyChanged;
         private bool _detailsShown = false;
         private FastDownloaderStatus CurrentStatus;
+
+        private EventHandler<int> _progressCallback;
+        public EventHandler<int> ProgressCallback
+        {
+            get => _progressCallback;
+            set => _progressCallback = value;
+        }
+
+        // Repeat for the other two...
+        private EventHandler<bool> _cancelledCallback;
+        public EventHandler<bool> CancelledCallback
+        {
+            get => _cancelledCallback;
+            set => _cancelledCallback = value;
+        }
+
+        private EventHandler<bool> _completedCallback;
+        public EventHandler<bool> CompletedCallback
+        {
+            get => _completedCallback;
+            set => _completedCallback = value;
+        }
+
+
+        // In your progress code:
+        void OnProgressChanged(int progress)
+        {
+            ProgressCallback?.Invoke(this, progress);
+        }
+
+        void OnCancelled()
+        {
+            CancelledCallback?.Invoke(this, true);
+        }
+
+        void OnCompleted()
+        {
+            CompletedCallback?.Invoke(this, true);
+        }
 
         private double _collapsedHeight = 240; // Set this to your "collapsed" height
         private double _maxExpandedHeight = 560;  // Set this to your "expanded" height
@@ -559,6 +599,8 @@ namespace FastDownloader
                                 double speedMbSec = speedMbelapsedMilliseconds * 1000;
                                 
                                 matchingItem.Progress = percent;
+                                ProgressCallback?.Invoke(this, percent); // percentValue: int (0-100)
+
                                 matchingItem.RemainingString = ToHumanReadableSize(remaining);
 
                                 if (speedMbSec > 1)
@@ -706,6 +748,8 @@ namespace FastDownloader
                     var dlgErr = new ErrorDialog($"All downloads cancelled after {globalDuration}.", ErrorDialogMode.Cancelled);
                     dlgErr.Owner = this; // sets parent window
                     dlgErr.ShowDialog();
+                    CancelledCallback?.Invoke(this, true); // or false, as your logic dictates
+
                     this.Close();
                     return true;
                 }
@@ -723,6 +767,7 @@ namespace FastDownloader
                 var dlg = new SuccessDialog($"All downloads completed in {globalDuration}.");
                 dlg.Owner = this; // sets parent window
                 dlg.ShowDialog();
+                CompletedCallback?.Invoke(this, true); // or false if error
 
                 this.Close();
                 return true;
