@@ -53,8 +53,13 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
-
-src/.vs
-src/.vs/**
+libs
+libs/**
 .vs
 .vs/**
+src/bin
+src/bin/**
+src/obj
+src/obj/**
+src/.vs
+src/.vs/**
