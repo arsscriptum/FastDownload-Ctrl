@@ -13,7 +13,7 @@ namespace FastDownloader
         public static Action<bool>? OnCancelled { get; set; }
         public static Action<int>? OnProgress { get; set; }
 
-        public static void ShowDialogFromContent(string jsonContent)
+        public static void ShowDialogFromContent(string jsonContent, string savePath)
         {
             var app = System.Windows.Application.Current ?? new System.Windows.Application();
             app.ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -29,7 +29,7 @@ namespace FastDownloader
             win.ProgressCallback += (s, progress) => OnProgress?.Invoke(progress);
             win.Loaded += async (s, e) =>
             {
-                bool result = await win.StartDownloadFiles();
+                bool result = await win.StartDownloadFiles(savePath);
                 Console.WriteLine($"[INFO] Download completed. Success: {result}");
                 // Optionally close the window or Application here
             };

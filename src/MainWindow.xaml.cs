@@ -94,7 +94,7 @@ namespace FastDownloader
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         public ObservableCollection<FileDownloadItem> Segments { get; set; } = new();
-        public string DownloadPath { get; set; } = "C:\\tmp";
+        private string DownloadPath { get; set; }
         
         public bool GlobalTransferStarted { get; set; } = false;
         public Stopwatch GlobalTimer { get; set; } = new Stopwatch();
@@ -345,6 +345,29 @@ namespace FastDownloader
                 MessageBox.Show($"Failed to load JSON file: {ex.Message}");
             }
         }
+        public void SetSavePath(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    throw new ArgumentException("Path cannot be null or empty.", nameof(path));
+
+                // Expand environment variables and get full path
+                string fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
+
+                // Create the directory if it doesn't exist
+                if (!Directory.Exists(fullPath))
+                    Directory.CreateDirectory(fullPath);
+
+                DownloadPath = fullPath;
+            }
+            catch (Exception ex)
+            {
+                // Log or rethrow as needed
+                throw new InvalidOperationException("Failed to set save path.", ex);
+            }
+        }
+
         public void LoadPackageInfoFromFileContent(string jsonContent)
         {
             try
@@ -393,36 +416,37 @@ namespace FastDownloader
             return files;
         }
 
-        public FileInfo ProcessCancelledFile(File file, string rootDirectory, CancellationToken ct = default, Action<DownloadState>? updateState = null)
+        public FileInfo ProcessCancelledFile(File file, CancellationToken ct = default, Action<DownloadState>? updateState = null)
         {
             
             updateState?.Invoke(DownloadState.Cancelled);
 
             string fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
+            string rootDirectory = DownloadPath;
             string downloadPath = System.IO.Path.Combine(rootDirectory, fileName);
 
 
             return new FileInfo(downloadPath);
         }
 
-        public async Task<FileInfo> DownloadFile( File file, string rootDirectory, CancellationToken ct = default, Action<DownloadState>? updateState = null, Action<int, long, long>? reportProgress = null, Action<int>? startTransfer = null, Action<int>? transferCompleted = null)
+        public async Task<FileInfo> DownloadFile( File file, CancellationToken ct = default, Action<DownloadState>? updateState = null, Action<int, long, long>? reportProgress = null, Action<int>? startTransfer = null, Action<int>? transferCompleted = null)
         {
             var sw = Stopwatch.StartNew();
             updateState?.Invoke(DownloadState.Initialized);
-            
+            string rootDirectory = DownloadPath;
             string fileName = System.IO.Path.GetFileName(new Uri(file.DownloadUrl).LocalPath);
-            string downloadPath = System.IO.Path.Combine(rootDirectory, fileName);
+            string saveFilePath = System.IO.Path.Combine(rootDirectory, fileName);
 
             using var response = await Config.HttpClient.GetAsync(file.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
 
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(downloadPath)!);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(saveFilePath)!);
             //NetStatsLogger.Log($"DOWNLOAD FILE {file.DownloadUrl}. {file.Size} bytes");
 
             using var httpStream = await response.Content.ReadAsStreamAsync();
 
 
-            using var fileStream = new FileStream(downloadPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            using var fileStream = new FileStream(saveFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
 
             var buffer = new byte[81920];
             long totalRead = 0;
@@ -440,7 +464,7 @@ namespace FastDownloader
                 if (IsCancelled())
                 {
                     updateState?.Invoke(DownloadState.Cancelled);
-                    return new FileInfo(downloadPath);
+                    return new FileInfo(saveFilePath);
 
                 }
                 if (fileTransferStarted == false)
@@ -490,13 +514,13 @@ namespace FastDownloader
             updateState?.Invoke(DownloadState.Completed);
             DownloadedSegments++;
 
-            return new FileInfo(downloadPath);
+            return new FileInfo(saveFilePath);
         }
 
      
 
        
-        public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, string rootDirectory, CancellationToken ct = default)
+        public async Task<List<FileInfo>> DownloadFiles(IEnumerable<File> fileList, CancellationToken ct = default)
         {
             var fileInfoBag = new ConcurrentBag<FileInfo>();
             var semaphore = new SemaphoreSlim(Config.MaxDegreeOfParallelism);
@@ -656,14 +680,14 @@ namespace FastDownloader
                     // We need to set all the non completed transfers has cancelled and quit
                     if (CanContinue())
                     {
-                        var fileInfo = await DownloadFile(file, rootDirectory, ct, updateState, reportProgress, startTransfer, transferCompleted);
+                        var fileInfo = await DownloadFile(file, ct, updateState, reportProgress, startTransfer, transferCompleted);
                         fileInfoBag.Add(fileInfo);
                     }
                     else
                     {
                         if (IsCancelled())
                         {
-                            var fileInfo = ProcessCancelledFile(file, rootDirectory, ct, updateState);
+                            var fileInfo = ProcessCancelledFile(file, ct, updateState);
                             fileInfoBag.Add(fileInfo);
                             
                         }
@@ -721,17 +745,18 @@ namespace FastDownloader
 
         private async void StartDownload_Click(object sender, RoutedEventArgs e)
         {
-            await StartDownloadFiles();
+           // await StartDownloadFiles("c:\\tmp");
         }
 
-        public async Task<bool> StartDownloadFiles()
+        public async Task<bool> StartDownloadFiles(string savePath)
         {
             try
             {
                 GlobalTimer.Start();
 
-                string downloadRoot = this.DownloadPath;
-                Directory.CreateDirectory(downloadRoot);
+                SetSavePath(savePath);
+
+           
 
                 var segs = Segments.Select(f => new File
                 {
@@ -741,7 +766,7 @@ namespace FastDownloader
                     Size = f.Size
                 }).ToList();
 
-                var downloadedFiles = await DownloadFiles(segs, downloadRoot);
+                var downloadedFiles = await DownloadFiles(segs);
                 GlobalTimer.Stop();
                 string globalDuration = $"{GlobalTimer.Elapsed.TotalSeconds:F2}s";
                 if (IsCancelled())
