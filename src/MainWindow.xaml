@@ -126,9 +126,9 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Button x:Name="btnShowDetails" Grid.Column="0" Content="&lt;&lt; Hide Details" Margin="0,4,420,0" Click="btnShowDetails_Click" FontFamily="MS Sans Serif" FontSize="9" RenderTransformOrigin="0.809,0.532" Grid.RowSpan="2" HorizontalAlignment="Right" Width="92" Height="28" VerticalAlignment="Top"/>
+            <Button x:Name="btnShowDetails" Grid.Column="0" Content="&lt;&lt; Hide Details" Margin="10,0,0,0" Click="btnShowDetails_Click" FontFamily="MS Sans Serif" FontSize="9" RenderTransformOrigin="0.809,0.532" HorizontalAlignment="Left" Width="75" Height="22" VerticalAlignment="Center" Grid.Row="1"/>
             <Button x:Name="btnPause" Content="Pause" Height="32" Margin="561,0,146,0" RenderTransformOrigin="0.178,0.567" Click="btnPause_Click"  Visibility="Hidden" FontFamily="MS Sans Serif" FontSize="9" Grid.RowSpan="2"/>
-            <Button x:Name="btnCancel" Content="Cancel" HorizontalAlignment="Left" Width="83" Margin="402,4,0,0" Click="btnCancel_Click" FontFamily="MS Sans Serif" FontSize="9" Grid.RowSpan="2"/>
+            <Button x:Name="btnCancel" Content="Cancel" HorizontalAlignment="Left" Width="75" Margin="416,5,0,2" Click="btnCancel_Click" FontFamily="MS Sans Serif" FontSize="9" Grid.Row="1"/>
             <Button x:Name="btnTest" Click="StartDownload_Click" Content="START TEST" Height="32" Margin="433,0,274,0" RenderTransformOrigin="0.178,0.567" Background="#FFFF3E2B" FontWeight="Bold" FontFamily="MS Sans Serif" FontSize="9" Visibility="Hidden" Grid.RowSpan="2"/>
         </Grid>
 
@@ -145,9 +145,9 @@
                   FontSize="10" HorizontalAlignment="Left" Width="493"
                   >
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Segment #" Binding="{Binding SegmentNumber}" Width="*"/>
-                <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*"/>
+                <DataGridTextColumn Header="#" Binding="{Binding SegmentNumber}" Width="25" />
+                <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="90"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/>
                 <DataGridTextColumn Header="Size" Binding="{Binding SizeString}" Width="*"/>
                 <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingString}" Width="*"/>
                 <DataGridTemplateColumn Header="Progress" Width="*">
